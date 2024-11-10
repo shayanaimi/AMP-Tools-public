@@ -3,24 +3,116 @@
 #include "hw/HW2.h"
 #include <stack>
 
+Eigen::VectorXd rungeKutta4(const Eigen::VectorXd& x0, const Eigen::VectorXd& control, double dt, Eigen::VectorXd (*func)(const Eigen::VectorXd&, const Eigen::VectorXd&)) {
+    Eigen::VectorXd w1 = func(x0, control);
+    Eigen::VectorXd w2 = func(x0 + dt / 2.0 * w1, control);
+    Eigen::VectorXd w3 = func(x0 + dt / 2.0 * w2, control);
+    Eigen::VectorXd w4 = func(x0 + dt * w3, control);
+    return x0 + (dt / 6.0) * (w1 + 2.0 * w2 + 2.0 * w3 + w4);
+}
+
+void MySimpleCar::HadiRK(Eigen::VectorXd& state, const Eigen::VectorXd& control, double dt) {
+    Eigen::VectorXd newState(5), w1(5), w2(5), w3(5), w4(5);
+
+    double x = state(0);
+    double y = state(1);
+    double theta = state(2);
+    double v = state(3);
+    double phi = state(4);
+
+    double u1 = control(0);
+    double u2 = control(1);
+
+    double der1 = v * cos(theta);
+    double der2 = v * sin(theta);
+    double der3 = v / 5 * tan(phi);
+    double der4 = u1;
+    double der5 = u2;
+
+    w1 << der1, der2, der3, der4, der5;
+
+    w2 << w1(0) + 0.5 * dt * w1(0),
+          w1(1) + 0.5 * dt * w1(1),
+          w1(2) + 0.5 * dt * w1(2),
+          w1(3) + 0.5 * dt * w1(3),
+          w1(4) + 0.5 * dt * w1(4);
+
+    w3 << w1(0) + 0.5 * dt * w2(0),
+          w1(1) + 0.5 * dt * w2(1),
+          w1(2) + 0.5 * dt * w2(2),
+          w1(3) + 0.5 * dt * w2(3),
+          w1(4) + 0.5 * dt * w2(4);
+
+    w4 << w1(0) + dt * w3(0),
+          w1(1) + dt * w3(1),
+          w1(2) + dt * w3(2),
+          w1(3) + dt * w3(3),
+          w1(4) + dt * w3(4);
+
+    newState = state + (dt / 6.0) * (w1 + 2 * w2 + 2 * w3 + w4);
+
+    state = newState;
+}
+
+
+Eigen::VectorXd SingleIntegratorDynamics(const Eigen::VectorXd& state, const Eigen::VectorXd& control) {
+    return control;
+}
+
+Eigen::VectorXd FirstOrderUniDynamics(const Eigen::VectorXd& state, const Eigen::VectorXd& control) {
+    double r = 0.25;
+    Eigen::VectorXd result(3);
+    result[0] = control[0] * cos(state[2]) * r;
+    result[1] = control[0] * sin(state[2]) * r;
+    result[2] = control[1];
+    return result;
+}
+
+Eigen::VectorXd SecondOrderUniDynamics(const Eigen::VectorXd& state, const Eigen::VectorXd& control) {
+    double r = 0.25;
+    Eigen::VectorXd result(5);
+    result[0] = state[3] * cos(state[2]) * r;
+    result[1] = state[3] * sin(state[2]) * r;
+    result[2] = state[4];
+    result[3] = control[0];
+    result[4] = control[1];
+    return result;
+}
+
+Eigen::VectorXd SimpleCarDynamics(const Eigen::VectorXd& state, const Eigen::VectorXd& control) {
+    //x y theta v phi
+    double L = 5.0;
+    double W = 2.0;
+    double x = state[0];
+    double y = state[1];
+    double theta = state[2];
+    double v = state[3];
+    double phi = state[4];
+    Eigen::VectorXd result(5);
+    result[0] = v * cos(theta);
+    result[1] = v * sin(theta);
+    result[2] = (v / L) * tan(phi);
+    result[3] = control[0];
+    result[4] = control[1];
+    return result;
+
+}
+
+void MySimpleCar::propagate(Eigen::VectorXd& state, Eigen::VectorXd& control, double dt) {
+    HadiRK(state, control, dt);
+    // state = rungeKutta4(state, control, dt, &SimpleCarDynamics);
+}
+
 void MySingleIntegrator::propagate(Eigen::VectorXd& state, Eigen::VectorXd& control, double dt) {
-    state += dt * control;
-};
+    state = rungeKutta4(state, control, dt, &SingleIntegratorDynamics);
+}
 
 void MyFirstOrderUnicycle::propagate(Eigen::VectorXd& state, Eigen::VectorXd& control, double dt) {
-    double r = 0.25;
-    state[0] = state[0] + dt * control[0] * cos(state[2]) * r;
-    state[1] = state[1] + dt * control[0] * sin(state[2]) * r;
-    state[2] = state[2] + dt * control[1];
+    state = rungeKutta4(state, control, dt, &FirstOrderUniDynamics);
 }
 
 void MySecondOrderUnicycle::propagate(Eigen::VectorXd& state, Eigen::VectorXd& control, double dt) {
-    double r = 0.25;
-    state[0] = state[0] + dt * state[3] * cos(state[2]) * r;
-    state[1] = state[1] + dt * state[3] * sin(state[2]) * r;
-    state[2] = state[2] + dt * state[4];
-    state[3] = state[3] + dt * control[0];
-    state[4] = state[4] + dt * control[1];
+    state = rungeKutta4(state, control, dt, &SecondOrderUniDynamics);
 
 }
 
@@ -116,12 +208,13 @@ std::pair<std::shared_ptr<amp::Graph<Eigen::VectorXd>>, std::map<amp::Node, Eige
     goal_centroid[1] = (q_goal[1].first + q_goal[1].second) / 2.0;
     auto [qlowerbounds, qupperbounds] = extractBounds(myproblem.q_bounds);
     auto [ulowerbounds, uupperbounds] = extractBounds(myproblem.u_bounds);
-    std::cout << "Control lower bounds: " << ulowerbounds.transpose() << std::endl;
-    std::cout << "Control upper bounds: " << uupperbounds.transpose() << std::endl;
+    // std::cout << "Control lower bounds: " << ulowerbounds.transpose() << std::endl;
+    // std::cout << "Control upper bounds: " << uupperbounds.transpose() << std::endl;
     points.push_back(q_init);
     nodes[0] = q_init;
     int goalBiasCtr = 0;
     for (int i = 1; i < N; i++){
+       
         Eigen::VectorXd sample = generateRandomNVector(eigenToStdVector(qlowerbounds), eigenToStdVector(qupperbounds));
         if (goalBiasCtr % 20 == 0){ // with a 0.5 chance
             sample = goal_centroid;
@@ -152,6 +245,7 @@ std::pair<std::shared_ptr<amp::Graph<Eigen::VectorXd>>, std::map<amp::Node, Eige
         Eigen::VectorXd control =  generateRandomNVector(eigenToStdVector(ulowerbounds), eigenToStdVector(uupperbounds));
         Eigen::VectorXd mid_point = closest_point;
         agent.propagate(mid_point, control, step_size);
+        // std::cout << "state[2]: " << mid_point[2] << ", state[4]: " << mid_point[4] << std::endl;
         int failcount = 0;
         Eigen::VectorXd last_try = mid_point;
         bool ditch = false;
@@ -166,7 +260,7 @@ std::pair<std::shared_ptr<amp::Graph<Eigen::VectorXd>>, std::map<amp::Node, Eige
             if (failcount > 10){
                 if ((last_try-mid_point).norm() < 0.1){
                     //then ditch this whole sample
-                    std::cout << "ditching 1" << "\n";
+                    // std::cout << "ditching 1" << "\n";
                     ditch = true;
                     break;
                 }
@@ -174,7 +268,7 @@ std::pair<std::shared_ptr<amp::Graph<Eigen::VectorXd>>, std::map<amp::Node, Eige
             last_try = mid_point;
         }
         if   (ditch){
-            std::cout << "ditching 2" << "\n";
+            // std::cout << "ditching 2" << "\n";
             i = i - 1;
             continue;
         }  
@@ -218,8 +312,10 @@ Eigen::VectorXd getCtrl(amp::Node current, amp::Node came_from, std::shared_ptr<
 }
 
 amp::KinoPath MyKinoRRT::plan(const amp::KinodynamicProblem2D& problem, amp::DynamicAgent& agent) {
-    double step_size = 0.5;
-    int N = 5000;
+    double step_size = 0.1;
+    std::cout << "step size can vary between " << myproblem.dt_bounds.first << " and " << myproblem.dt_bounds.second << ". Using " << step_size << "\n";
+    
+    int N = 50000;
     myproblem = problem;
     amp::KinoPath path;
     Eigen::VectorXd state = problem.q_init;
@@ -236,6 +332,8 @@ amp::KinoPath MyKinoRRT::plan(const amp::KinodynamicProblem2D& problem, amp::Dyn
     double plength = 0;
     // std::cout << "graph is created, starting breadth-first search" << "\n";
     // std::cout << "is reversible: "  << random_graph->isReversible() << "\n";
+    std::cout << "nodes size: " << nodes.size() << "\n";
+    
     double tol = 1;
     while (!stack.empty()) {   
         amp::Node current = stack.top();
@@ -245,10 +343,13 @@ amp::KinoPath MyKinoRRT::plan(const amp::KinodynamicProblem2D& problem, amp::Dyn
         // std::cout << "dist_to_goal: " << dist_to_goal << "\n";
         if (current == goal_node ) {
             // std::cout << "found goal near " << nodes[current] << "\n";
-            path.waypoints.push_back(nodes[goal_node].head<2>());
+            std::cout << "goal node: " << nodes[goal_node] << "\n";
+            
+            // path.waypoints.push_back(nodes[goal_node].head<2>());
+            path.waypoints.push_back(nodes[goal_node]);
             while (current != init_node) {
                 if (current == goal_node) {
-                    plength = plength + (nodes[current] - nodes[came_from[current]]).norm();
+                    plength = plength + (nodes[current].head<2>() - nodes[came_from[current]].head<2>()).norm();
                     current = came_from[current];
                     auto ctrl = getCtrl(current, came_from[current], random_graph);
                     path.controls.push_back(ctrl);
@@ -257,7 +358,8 @@ amp::KinoPath MyKinoRRT::plan(const amp::KinodynamicProblem2D& problem, amp::Dyn
                 }
                 auto ctrl = getCtrl(current, came_from[current], random_graph);
                 path.controls.push_back(ctrl);
-                path.waypoints.emplace_back(nodes[current].head<2>());
+                // path.waypoints.emplace_back(nodes[current].head<2>());
+                path.waypoints.emplace_back(nodes[current]);
                 path.durations.push_back(step_size);
 
                 // std::cout << "pushing waypt: " << nodes[current] << "\n";
@@ -286,31 +388,9 @@ amp::KinoPath MyKinoRRT::plan(const amp::KinodynamicProblem2D& problem, amp::Dyn
                 
             }
         }
-        // for (const auto& neighbor : random_graph->parents(current)) {
-        //     // std::cout << "parent: " << nodes[neighbor] << "\n";
-        //     if (came_from.find(neighbor) == came_from.end()) {
-        //         // std::cout << "pushing it" << "\n";
-        //         stack.push(neighbor);
-        //         came_from[neighbor] = current;
-        //         // std::cout << "stack size: " << stack.size() << "\n";
-                
-        //     }
-        // }
+        
     }
-
-    
-    // path.waypoints.push_back(state);
-    // for (int i = 0; i < 10; i++) {
-    //     Eigen::VectorXd control = Eigen::VectorXd::Random(problem.q_init.size());
-    //     agent.propagate(state, control, 1.0);
-    //     path.waypoints.push_back(state);
-    //     path.controls.push_back(control);
-    //     path.durations.push_back(1.0);
-    // }
-    // std::cout << "Path controls: ";
-    // for (const auto& control : path.controls) {
-    //     std::cout << control.transpose() << " ";
-    // }
+    std::cout << "path length: " << plength << "\n";
     std::cout << "\n";
     path.valid = true;
     return path;

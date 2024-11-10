@@ -19,6 +19,7 @@ class MyKinoRRT : public amp::KinodynamicRRT {
 class MySingleIntegrator : public amp::DynamicAgent {
     public:
         virtual void propagate(Eigen::VectorXd& state, Eigen::VectorXd& control, double dt) override;
+        // Eigen::VectorXd dynamics(const Eigen::VectorXd& state, const Eigen::VectorXd& control);
 };
 
 class MyFirstOrderUnicycle : public amp::DynamicAgent {
@@ -33,5 +34,6 @@ class MySecondOrderUnicycle : public amp::DynamicAgent {
 
 class MySimpleCar : public amp::DynamicAgent {
     public:
-        virtual void propagate(Eigen::VectorXd& state, Eigen::VectorXd& control, double dt) override {};
+        virtual void propagate(Eigen::VectorXd& state, Eigen::VectorXd& control, double dt) override;
+        void HadiRK(Eigen::VectorXd& state, const Eigen::VectorXd& control, double dt);
 };
