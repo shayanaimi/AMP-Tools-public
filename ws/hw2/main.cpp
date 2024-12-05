@@ -16,7 +16,11 @@ int main(int argc, char** argv) {
     /*    Randomly generate the problem     */ 
 
     // Use WO1 from Exercise 2
-    Problem2D problem = HW2::getWorkspace1();
+    Problem2D problem = HW2::getWorkspace2();
+    amp::Path2D path;
+    Visualizer::makeFigure(problem, path);
+    Visualizer::showFigures();
+
 
     // Use WO1 from Exercise 2
     /*

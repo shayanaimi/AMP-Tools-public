@@ -17,6 +17,8 @@ int main(int argc, char** argv) {
     MyManipulator2D manipulator;
     Problem2D point_problem = HW2::getWorkspace2();
     Problem2D manip_problem = HW6::getHW4Problem2();
+    amp::Path2D path;
+    
     
     // Construct point-agent and manipulator cspace instances.
     std::size_t n_cells = (point_problem.x_max - point_problem.x_min)/0.25;

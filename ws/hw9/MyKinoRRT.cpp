@@ -81,7 +81,7 @@ Eigen::VectorXd SecondOrderUniDynamics(const Eigen::VectorXd& state, const Eigen
 
 Eigen::VectorXd SimpleCarDynamics(const Eigen::VectorXd& state, const Eigen::VectorXd& control) {
     //x y theta v phi
-    double L = 5.0;
+    double L = 1.0;
     double W = 2.0;
     double x = state[0];
     double y = state[1];
@@ -132,7 +132,7 @@ std::vector<Eigen::Vector2d> blowUp(std::vector<Eigen::Vector2d> verts, double f
 bool MyKinoRRT::inCollision(const Eigen::VectorXd& cspace_state){
     for (amp::Obstacle2D obs : myproblem.obstacles){
             // std::cout<<"checking obstacle" << "\n";
-            std::vector<Eigen::Vector2d> points = blowUp(obs.verticesCCW(), 1);
+            std::vector<Eigen::Vector2d> points = blowUp(obs.verticesCCW(), 1.2);
             int k, m, nvert = points.size();
             bool c = false;
             for(k = 0, m = nvert - 1; k < nvert; m = k++) {
@@ -329,7 +329,7 @@ Eigen::VectorXd getCtrl(amp::Node current, amp::Node came_from, std::shared_ptr<
 }
 
 amp::KinoPath MyKinoRRT::plan(const amp::KinodynamicProblem2D& problem, amp::DynamicAgent& agent) {
-    double step_size = 0.08;
+    double step_size = 0.05;
     std::cout << "step size can vary between " << myproblem.dt_bounds.first << " and " << myproblem.dt_bounds.second << ". Using " << step_size << "\n";
     
     int N = 100000;

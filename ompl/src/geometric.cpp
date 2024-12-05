@@ -53,7 +53,7 @@ og::SimpleSetupPtr geometricSimpleSetUp(const World *w) {
     Agent *a = w->getAgents()[0];
 
     // create state space (with bounds)
-    auto space(std::make_shared<ob::SE2StateSpace>());
+    auto space(std::make_shared<ob::SE2StateSpace>()); //create state space
     ob::RealVectorBounds bounds(2);    
     bounds.setLow(0, w->getWorldDimensions()[0].first); //  x lower bound
     bounds.setHigh(0, w->getWorldDimensions()[0].second); // x upper bound
@@ -89,7 +89,7 @@ og::SimpleSetupPtr geometricSimpleSetUp(const World *w) {
 // main planning function -- uses simple setup
 void planGeometric(std::string planner_string, std::string problem_file) {
     //create world from YAML file
-    World *w = yaml2world("problems/" + problem_file + ".yml");
+    World *w = yaml2world("problems/" + problem_file + ".yml"); //dw about this
     // create simple setup object
     og::SimpleSetupPtr ss = geometricSimpleSetUp(w);
 
