@@ -119,89 +119,75 @@ Eigen::Vector2d projected_closest(const Eigen::Vector2d& q, const amp::Obstacle2
 
 amp::Path2D MySnowboard::plan(const amp::Problem2D& problem) {
     amp::Path2D path;
+	MySlope slope(problem);
+	slope.evenMoguls(8);
     path.waypoints.push_back(problem.q_init);
     Eigen::Vector2d q = problem.q_init;
     double epsilon = .25;
 	int count = 0;
     while (euclidian(q, problem.q_goal) > epsilon){
         //ATTRACTIVE FORCE
-			Eigen::Vector2d att;
-			double euclid = euclidian(q, problem.q_goal);
-			if (euclid <= d_star){
-				att[0] =  zetta * (q[0] - problem.q_goal[0]);
-                att[1] =  zetta * (q[1] - problem.q_goal[1]);
+		Eigen::Vector2d att;
+		double euclid = euclidian(q, problem.q_goal);
+		if (euclid <= d_star){
+			att[0] =  zetta * (q[0] - problem.q_goal[0]);
+			att[1] =  zetta * (q[1] - problem.q_goal[1]);
+		}
+		else{
+			att[0] = d_star * zetta * (q[0] - problem.q_goal[0]) / euclid ;
+			att[1] = d_star * zetta * (q[1] - problem.q_goal[1]) / euclid ;
+		}
+		//REPULSIVE FORCE
+		Eigen::Vector2d rep; rep << 0, 0;
+		for (mogul mog: slope.moguls){
+			//std::cout<<"checking obs" << "\n";
+			double di = slope.dist_to_mog(q, mog);
+			if (di <= Q_star){
+				//std::cout<<"adding to rep" << "\n";
+				// rep += 0.5 * eta * pow(((1 / di)-(1/Q_star)), 2);
+				
+				rep[0] += (q[0] - mog.getX())*sin(di*M_PI/mog.getWidth())/di;
+				rep[1] += (q[1] - mog.getY())*sin(di*M_PI/mog.getWidth())/di;
+				//mog.getHeight()*cos(di*M_PI/mog.getWidth());
+
 			}
-			else{
-				att[0] = d_star * zetta * (q[0] - problem.q_goal[0]) / euclid ;
-                att[1] = d_star * zetta * (q[1] - problem.q_goal[1]) / euclid ;
-			}
-            
+		}
+
+		//check if we are stuck in a local minimum
+		Eigen::Vector2d prev_q = q;
+		q = q - 0.1 * (att + rep);
+		if (euclidian(q, prev_q) < 0.03){
+			Eigen::Vector2d random_step;
+			random_step[0] = ((double)rand() / RAND_MAX - 0.5) * 0.1; // Small random step in x
+			random_step[1] = ((double)rand() / RAND_MAX - 0.5) * 0.1; // Small random step in y
+			q += random_step;
+		}
+		
+		count++;
+		if (count == 10000
+		){
+			std::cout<<"too many iterations" << "\n";
+			break;
+		}
+    
 			
-			count++;
-			if (count == 10000){
-				break;
-			}
-            
-			//REPULSIVE FORCE
-			Eigen::Vector2d rep; rep << 0, 0;
-			std::vector<amp::Obstacle2D> obstacles = problem.obstacles;
-			std::vector<Eigen::Vector2d> coeffs;
-			coeffs.push_back(Eigen::Vector2d({1, 0}));
-			coeffs.push_back(Eigen::Vector2d({1, 0}));
-			coeffs.push_back(Eigen::Vector2d({1, 20}));
-			coeffs.push_back(Eigen::Vector2d({1, 20}));
-			int wsid = 0; //for hw5ws1 and hw2ws1
-			if (problem.obstacles.size() >= 8){
-				wsid = 1; //forhw2ws2
-				Q_star = 5;
-				eta = 0.8;
-			}
-			//wsid = 1;
-			//Q_star = std::min(euclid, Q_star);
-			for (amp::Obstacle2D obs : obstacles){
-				double di = dist_to_obs(q, obs);
-				//Eigen::Vector2d closest = closest_vert(q, obs);
-				Eigen::Vector2d closest = projected_closest(q, obs);
+			
 
-				if (di <= Q_star){
-					//std::cout<<"adding to rep" << "\n";
-					// rep[0] += eta * coeffs[0][wsid] * (1/Q_star - 1/di)*((q[0]-closest[0])/di)/pow(di, 2);
-                    // rep[1] += eta * coeffs[1][wsid] * (1/Q_star - 1/di)*((q[1]-closest[1])/di)/pow(di, 2);
-					rep[0] += eta * coeffs[0][wsid] * (1/Q_star - 1/di)*((q[0]-closest[0])/di)/pow(di, 2);
-                    rep[1] += eta * coeffs[1][wsid] * (1/Q_star - 1/di)*((q[1]-closest[1])/di)/pow(di, 2);
-				}
-				Eigen::Vector2d cent = centroid(obs);
-				di = euclidian(cent, q);
-				if (di <= Q_star){
-					// rep[0] +=  eta * coeffs[2][wsid] * (1/Q_star - 1/di)*((q[0]-cent[0])/di)/pow(di, 2);
-                    // rep[1] +=  eta * coeffs[3][wsid] * (1/Q_star - 1/di)*((q[1]-cent[1])/di)/pow(di, 2);
-					rep[0] +=  eta * coeffs[2][wsid] *  (1/Q_star - 1/di)*((q[0]-cent[0])/di)/pow(di, 2);
-                    rep[1] +=  eta * coeffs[3][wsid]*(1/Q_star - 1/di)*((q[1]-cent[1])/di)/pow(di, 2);
-				}
-
-			}
-			//std::cout<< "repulsive force: " << rep[0] << ", " << rep[1] << "\n";
-			double alpha = 0.3;
 			Eigen::Vector2d changePos; changePos << att[0] + rep[0], att[1] + rep[1];
-			double lenChangePos = sqrt(pow(changePos[0], 2) + pow(changePos[1], 2));
-			//TODO: INSERT CASE FOR IF IT GETS STUCK AT LOCAL MIN
-			//but before that, i would first fix the fact that it literally goes through the obstacles in WS3
-			if (abs(changePos[0]) < .05 && abs(changePos[1])< .05 ){
-				Eigen::Vector2d changePos; changePos << att[0], att[1];
-				double lenChangePos = sqrt(pow(changePos[0], 2) + pow(changePos[1], 2));
-				q[0] = q[0] - alpha/lenChangePos*(att[0]);
-            	q[1] = q[1] - alpha/lenChangePos*(att[1]);
-				path.waypoints.push_back(q);
-				continue;
-			}
-			q[0] = q[0] - .55/lenChangePos*(att[0] + rep[0]);
-            q[1] = q[1] - .55/lenChangePos*(att[1] + rep[1]);
-			//std::cout<< "pushing back" << q[0] << ", " << q[1] << "\n";
+			// Normalize changePos to get the direction
+			Eigen::Vector2d direction = changePos.normalized();
+			
+			// Define a step size
+			double stepSize = 0.3;
+
+			// Take a small step in the direction of changePos
+			q -= stepSize * direction;
+
+
+			// Add the new position to the waypoints
 			path.waypoints.push_back(q);
-        //calculate vector representing gradient
-        //take a step in that direction
-        //push back new q
-        //update q
+			
+       
     }
     
 
@@ -252,13 +238,16 @@ void MySlope::evenMoguls(int n){
 			double x = mwidth/2 + j*mwidth;
 			double y = mwidth/2 + i*mwidth;
 			mogul m(x, y);
-			m.height = .5;
+			m.height = .2;
 			m.width = mwidth;
 			if (!mogulCollision(m, moguls)){
 				moguls.push_back(m);
 			}
 		}
 		
+	}
+	if (!moguls.empty()) {
+		moguls.pop_back();
 	}
 	std::cout << "moguls size: " << moguls.size() << "\n";
 }
@@ -268,7 +257,7 @@ double MySlope::operator()(const Eigen::Vector2d& q) const {
 			
 			double d_star = 3; //CHANGE ALL OF THESE TO PARAMETERS
 			double zetta = .1;
-			double Q_star = 1;
+			double Q_star = .5;
 			double eta = 0.5;
 
 			//ATTRACTIVE FORCE (downhill)
