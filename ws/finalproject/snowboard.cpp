@@ -146,8 +146,8 @@ amp::Path2D MySnowboard::plan(const amp::Problem2D& problem) {
 				//std::cout<<"adding to rep" << "\n";
 				// rep += 0.5 * eta * pow(((1 / di)-(1/Q_star)), 2);
 				
-				rep[0] += (q[0] - mog.getX())*sin(di*M_PI/mog.getWidth())/di;
-				rep[1] += (q[1] - mog.getY())*sin(di*M_PI/mog.getWidth())/di;
+				rep[0] -= .35*(q[0] - mog.getX())*sin(di*M_PI/mog.getWidth())/di;
+				rep[1] -= .35*(q[1] - mog.getY())*sin(di*M_PI/mog.getWidth())/di;
 				//mog.getHeight()*cos(di*M_PI/mog.getWidth());
 
 			}
@@ -169,16 +169,13 @@ amp::Path2D MySnowboard::plan(const amp::Problem2D& problem) {
 			std::cout<<"too many iterations" << "\n";
 			break;
 		}
-    
-			
-			
 
 			Eigen::Vector2d changePos; changePos << att[0] + rep[0], att[1] + rep[1];
 			// Normalize changePos to get the direction
 			Eigen::Vector2d direction = changePos.normalized();
 			
 			// Define a step size
-			double stepSize = 0.3;
+			double stepSize = 0.1;
 
 			// Take a small step in the direction of changePos
 			q -= stepSize * direction;
@@ -186,11 +183,12 @@ amp::Path2D MySnowboard::plan(const amp::Problem2D& problem) {
 
 			// Add the new position to the waypoints
 			path.waypoints.push_back(q);
-			
-       
     }
     
-
+	for (int i = 1; i < path.waypoints.size(); i++){
+		path.waypoints[i] += Eigen::Vector2d(.4, .4);
+	}
+	
     path.waypoints.push_back(problem.q_goal);
     return path;
 }
@@ -238,7 +236,7 @@ void MySlope::evenMoguls(int n){
 			double x = mwidth/2 + j*mwidth;
 			double y = mwidth/2 + i*mwidth;
 			mogul m(x, y);
-			m.height = .2;
+			m.height = .5;
 			m.width = mwidth;
 			if (!mogulCollision(m, moguls)){
 				moguls.push_back(m);
@@ -248,6 +246,7 @@ void MySlope::evenMoguls(int n){
 	}
 	if (!moguls.empty()) {
 		moguls.pop_back();
+		moguls.erase(moguls.begin());
 	}
 	std::cout << "moguls size: " << moguls.size() << "\n";
 }
