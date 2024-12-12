@@ -18,7 +18,7 @@ int main(int argc, char** argv) {
     prob.q_goal = Eigen::Vector2d(0, 0);
     prob.q_init = Eigen::Vector2d(9, 9);
     MySlope mpf(prob);
-    mpf.evenMoguls(8);
+    mpf.evenMoguls(6);
     std::vector<amp::Obstacle2D> obs;
     for (auto& mog : mpf.moguls) {
         amp::Obstacle2D obs_i;
@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
         }
         obs.push_back(obs_i);
     }
-    // amp::Visualizer::makeFigure(mpf, prob, 100, true, -100, 100); //idk what umin and umax are
+    amp::Visualizer::makeFigure(mpf, prob, 100, true, -100, 100); //idk what umin and umax are
 
     prob.obstacles = obs;
     

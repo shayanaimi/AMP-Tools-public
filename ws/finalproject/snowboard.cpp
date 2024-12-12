@@ -175,7 +175,7 @@ amp::Path2D MySnowboard::plan(const amp::Problem2D& problem) {
 			Eigen::Vector2d direction = changePos.normalized();
 			
 			// Define a step size
-			double stepSize = 0.1;
+			double stepSize = 0.3;
 
 			// Take a small step in the direction of changePos
 			q -= stepSize * direction;
@@ -186,7 +186,7 @@ amp::Path2D MySnowboard::plan(const amp::Problem2D& problem) {
     }
     
 	for (int i = 1; i < path.waypoints.size(); i++){
-		path.waypoints[i] += Eigen::Vector2d(.4, .4);
+		path.waypoints[i] += Eigen::Vector2d(.1, .1);
 	}
 	
     path.waypoints.push_back(problem.q_goal);
@@ -227,7 +227,8 @@ void MySlope::evenMoguls(int n){
 	//calculate mogul widths so that they fill the space
 	//mogul width should be width of slope / number of moguls
 	double slope_width = x_max - x_min;
-	double mwidth = slope_width / n;
+	double mwidth = slope_width / 8*1.4;
+	
 	std::cout << "mogul width: " << mwidth << "\n";
 	//space them evenly throughout the space, with each row staggered by 1/2 width
 
@@ -236,7 +237,8 @@ void MySlope::evenMoguls(int n){
 			double x = mwidth/2 + j*mwidth;
 			double y = mwidth/2 + i*mwidth;
 			mogul m(x, y);
-			m.height = .5;
+			std::uniform_real_distribution<> dis_height(.2, .5);
+			m.height = dis_height(gen);
 			m.width = mwidth;
 			if (!mogulCollision(m, moguls)){
 				moguls.push_back(m);
@@ -262,7 +264,7 @@ double MySlope::operator()(const Eigen::Vector2d& q) const {
 			//ATTRACTIVE FORCE (downhill)
 			double att = 0;
 			double euclid = euclidian(q, problem.q_goal);
-			if (euclid <= d_star){
+			if (euclid <= .2){
 				att = zetta * pow(euclid, 2);
 			}
 			else{
