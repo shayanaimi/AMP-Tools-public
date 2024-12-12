@@ -32,7 +32,8 @@ int main(int argc, char** argv) {
         }
         obs.push_back(obs_i);
     }
-    amp::Visualizer::makeFigure(mpf, prob, 100, true, -100, 100); //idk what umin and umax are
+    // visualize the vector field of the potential function
+    // amp::Visualizer::makeFigure(mpf, prob, 100, true, -100, 100); //idk what umin and umax are
 
     prob.obstacles = obs;
     
@@ -44,7 +45,8 @@ int main(int argc, char** argv) {
     amp::Path2D path = board.plan(prob);
     // void amp::Visualizer::makeFigure(const PotentialFunction2D& potential_function, const Problem2D& prob, std::size_t n_grid, bool vector, double u_min, double u_max) {
     // amp::Visualizer::makeFigure(mpf, prob.x_min, prob.x_max, prob.y_min, prob.y_max, 0, 100);
-    amp::Visualizer::makeFigure(mpf, prob, 100, false, 0, 100); 
+    // amp::Visualizer::makeFigure(mpf, prob, 100, false, 0, 100);     //visualize the potential functin itself
+
     amp::Visualizer::makeFigure(prob, path);
 
     amp::Visualizer::showFigures();

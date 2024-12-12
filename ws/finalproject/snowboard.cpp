@@ -118,6 +118,7 @@ Eigen::Vector2d projected_closest(const Eigen::Vector2d& q, const amp::Obstacle2
 }
 
 amp::Path2D MySnowboard::plan(const amp::Problem2D& problem) {
+	//STATE INTEGRATOR PLANNER
     amp::Path2D path;
 	MySlope slope(problem);
 	slope.evenMoguls(8);
@@ -125,6 +126,8 @@ amp::Path2D MySnowboard::plan(const amp::Problem2D& problem) {
     Eigen::Vector2d q = problem.q_init;
     double epsilon = .25;
 	int count = 0;
+    // double heading = atan2(problem.q_init[1] - problem.q_goal[1], problem.q_init[0] - problem.q_goal[0]);
+	double heading = atan2(problem.q_goal[1] - problem.q_init[1], problem.q_goal[0] - problem.q_init[0]);
     while (euclidian(q, problem.q_goal) > epsilon){
         //ATTRACTIVE FORCE
 		Eigen::Vector2d att;
@@ -162,23 +165,50 @@ amp::Path2D MySnowboard::plan(const amp::Problem2D& problem) {
 			random_step[1] = ((double)rand() / RAND_MAX - 0.5) * 0.1; // Small random step in y
 			q += random_step;
 		}
-		
+
 		count++;
-		if (count == 10000
+		if (count == 100
 		){
 			std::cout<<"too many iterations" << "\n";
 			break;
 		}
 
+			double max_steering_change = .3; // Maximum change in steering angle in radians
+			Eigen::Vector2d gradient = -att-rep;
+			double gradient_heading = atan2(gradient[1], gradient[0]);
+			double heading_diff = heading - gradient_heading;
+			while (heading_diff > M_PI){
+				heading_diff -= 2 * M_PI;
+			}
+			while (heading_diff < -M_PI){
+				heading_diff += 2 * M_PI;
+			}
+
+			if (abs(heading_diff) > max_steering_change){
+				// Limit the change in steering angle to max_steering_change
+				// This is done to prevent the robot from making too sharp of turns
+				// We calculate the new heading by adding the maximum allowed steering change
+				// to the current heading, in the direction of the gradient
+				double steering_change = max_steering_change * (heading_diff / abs(heading_diff));
+				std::cout << "steering_change: " << steering_change << "\n";
+				gradient_heading = heading - steering_change;
+				
+			}
+			
+			//now we need to use the new gradient heading as the control input and propagate that control for a small amount of time
+			Eigen::Vector2d control; control << cos(gradient_heading), sin(gradient_heading);
+			double stepSize = 0.2;
+			q = q + stepSize * control;
+			heading = gradient_heading;
 			Eigen::Vector2d changePos; changePos << att[0] + rep[0], att[1] + rep[1];
 			// Normalize changePos to get the direction
 			Eigen::Vector2d direction = changePos.normalized();
 			
 			// Define a step size
-			double stepSize = 0.3;
+			
 
 			// Take a small step in the direction of changePos
-			q -= stepSize * direction;
+			// q -= stepSize * direction;
 
 
 			// Add the new position to the waypoints
