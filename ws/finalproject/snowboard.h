@@ -33,6 +33,8 @@ class MySnowboard : public amp::GDAlgorithm {
 
 		// Override this method to solve a given problem.
 		virtual amp::Path2D plan(const amp::Problem2D& problem) override;
+		amp::Path2D founi_plan(const amp::Problem2D& problem);
+		amp::KinoPath souni_plan(const amp::Problem2D& problem);
 	private:
 		double d_star, zetta, Q_star, eta;
 		

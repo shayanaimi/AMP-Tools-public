@@ -309,7 +309,7 @@ void amp::Visualizer::createAxes(const Eigen::VectorXd& q_init, const std::vecto
     Eigen::Vector2d q_init_2d = q_init.head<2>();
     std::unique_ptr<ampprivate::pybridge::PythonObject> q_init_obj = pointToPythonObject(q_init_2d);
     std::unique_ptr<ampprivate::pybridge::PythonObject> q_goal_obj = listOfPairsToPythonObject(q_goal);
-    ampprivate::pybridge::ScriptCaller::call("VisualizeDynamicAgent", "visualize_goal", std::make_tuple(q_init_obj->get(), q_goal_obj->get()));
+    //ampprivate::pybridge::ScriptCaller::call("VisualizeDynamicAgent", "visualize_goal", std::make_tuple(q_init_obj->get(), q_goal_obj->get()));
 
 }
 

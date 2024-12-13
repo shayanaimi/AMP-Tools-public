@@ -117,6 +117,252 @@ Eigen::Vector2d projected_closest(const Eigen::Vector2d& q, const amp::Obstacle2
 		return point;
 }
 
+Eigen::VectorXd FirstOrderUniDynamics(const Eigen::VectorXd& state, const Eigen::VectorXd& control) {
+    double r = 0.25;
+    Eigen::VectorXd result(3);
+    result[0] = control[0] * cos(state[2]) * r;
+    result[1] = control[0] * sin(state[2]) * r;
+    result[2] = control[1];
+    return result;
+}
+
+Eigen::VectorXd SecondOrderUniDynamics(const Eigen::VectorXd& state, const Eigen::VectorXd& control) {
+    double r = 0.25;
+    Eigen::VectorXd result(5);
+    result[0] = state[3] * cos(state[2]) * r;
+    result[1] = state[3] * sin(state[2]) * r;
+    result[2] = state[4];
+    result[3] = control[0];
+    result[4] = control[1];
+    return result;
+}
+
+Eigen::VectorXd rungeKutta4(const Eigen::VectorXd& x0, const Eigen::VectorXd& control, double dt, Eigen::VectorXd (*func)(const Eigen::VectorXd&, const Eigen::VectorXd&)) {
+	Eigen::VectorXd w1 = func(x0, control);
+    Eigen::VectorXd w2 = func(x0 + dt / 2.0 * w1, control);
+    Eigen::VectorXd w3 = func(x0 + dt / 2.0 * w2, control);
+    Eigen::VectorXd w4 = func(x0 + dt * w3, control);
+    return x0 + (dt / 6.0) * (w1 + 2.0 * w2 + 2.0 * w3 + w4);
+}
+
+Eigen::VectorXd founi_propagate(Eigen::VectorXd& state, Eigen::Vector2d& control, double dt) {
+    state = rungeKutta4(state, control, dt, &FirstOrderUniDynamics);
+	return state;
+}
+
+Eigen::VectorXd souni_propagate(Eigen::VectorXd& state, Eigen::Vector2d& control, double dt) {
+    state = rungeKutta4(state, control, dt, &SecondOrderUniDynamics);
+	return state;
+}
+
+amp::KinoPath MySnowboard::souni_plan(const amp::Problem2D& problem) {
+	//STATE INTEGRATOR PLANNER
+    amp::Path2D path;
+	amp::KinoPath kinopath;
+	MySlope slope(problem);
+	slope.evenMoguls(8);
+    path.waypoints.push_back(problem.q_init);
+    Eigen::Vector2d q = problem.q_init;
+    double epsilon = .25;
+	int count = 0;
+    // double heading = atan2(problem.q_init[1] - problem.q_goal[1], problem.q_init[0] - problem.q_goal[0]);
+	double heading = atan2(problem.q_goal[1] - problem.q_init[1], problem.q_goal[0] - problem.q_init[0]);
+    while (euclidian(q, problem.q_goal) > epsilon){
+        //ATTRACTIVE FORCE
+		Eigen::Vector2d att;
+		double euclid = euclidian(q, problem.q_goal);
+		if (euclid <= d_star){
+			att[0] =  zetta * (q[0] - problem.q_goal[0]);
+			att[1] =  zetta * (q[1] - problem.q_goal[1]);
+		}
+		else{
+			att[0] = d_star * zetta * (q[0] - problem.q_goal[0]) / euclid ;
+			att[1] = d_star * zetta * (q[1] - problem.q_goal[1]) / euclid ;
+		}
+		//REPULSIVE FORCE
+		
+		Eigen::Vector2d rep; rep << 0, 0;
+		for (mogul mog: slope.moguls){
+			//std::cout<<"checking obs" << "\n";
+			double di = slope.dist_to_mog(q, mog);
+			if (di <= Q_star){
+				//std::cout<<"adding to rep" << "\n";
+				// rep += 0.5 * eta * pow(((1 / di)-(1/Q_star)), 2);
+				
+				rep[0] -= .35*(q[0] - mog.getX())*sin(di*M_PI/mog.getWidth())/di;
+				rep[1] -= .35*(q[1] - mog.getY())*sin(di*M_PI/mog.getWidth())/di;
+				//mog.getHeight()*cos(di*M_PI/mog.getWidth());
+
+			}
+		}
+
+		//check if we are stuck in a local minimum
+		Eigen::Vector2d prev_q = q;
+		q = q - 0.1 * (att + rep);
+		if (euclidian(q, prev_q) < 0.03){
+			Eigen::Vector2d random_step;
+			random_step[0] = ((double)rand() / RAND_MAX - 0.5) * 0.1; // Small random step in x
+			random_step[1] = ((double)rand() / RAND_MAX - 0.5) * 0.1; // Small random step in y
+			q += random_step;
+		}
+
+		count++;
+		if (count == 10000
+		){
+			std::cout<<"too many iterations" << "\n";
+			break;
+		}
+			
+			double max_steering_change = .1; // Maximum change in steering angle in radians
+			Eigen::Vector2d gradient = -att-rep;
+			double gradient_heading = atan2(gradient[1], gradient[0]);
+			double heading_diff = heading - gradient_heading;
+			while (heading_diff > M_PI){
+				heading_diff -= 2 * M_PI;
+			}
+			while (heading_diff < -M_PI){
+				heading_diff += 2 * M_PI;
+			}
+
+			if (abs(heading_diff) > max_steering_change){
+				// Limit the change in steering angle to max_steering_change
+				// This is done to prevent the robot from making too sharp of turns
+				// We calculate the new heading by adding the maximum allowed steering change
+				// to the current heading, in the direction of the gradient
+				double steering_change = max_steering_change * (heading_diff / abs(heading_diff));
+				gradient_heading = heading - steering_change;
+				
+			}
+			
+
+			//for first order uni, controls are velocity and steering angle
+			// Eigen::Vector2d control; control << log(gradient.norm()+1)*13, gradient_heading;
+			Eigen::Vector2d control; control << gradient.norm()*10, gradient_heading; //change this to be steering angle rate, not steering angle
+			double stepSize = .2;
+			Eigen::VectorXd state(3);
+			state << q[0], q[1], heading;
+			state = souni_propagate(state, control, stepSize);
+			q = state.head<2>();
+			heading = gradient_heading;
+			// heading = gradient_heading;
+			// Add the new position to the waypoints
+			path.waypoints.push_back(q);
+			kinopath.controls.push_back(control);
+			kinopath.durations.push_back(stepSize);
+			kinopath.waypoints.push_back(q);
+    }
+    
+	for (int i = 1; i < path.waypoints.size(); i++){
+		path.waypoints[i] += Eigen::Vector2d(-.1, -.1);
+	}
+	
+    path.waypoints.push_back(problem.q_goal);
+    return kinopath;
+}
+
+amp::Path2D MySnowboard::founi_plan(const amp::Problem2D& problem) {
+	//STATE INTEGRATOR PLANNER
+    amp::Path2D path;
+	MySlope slope(problem);
+	slope.evenMoguls(8);
+    path.waypoints.push_back(problem.q_init);
+    Eigen::Vector2d q = problem.q_init;
+    double epsilon = .25;
+	int count = 0;
+    // double heading = atan2(problem.q_init[1] - problem.q_goal[1], problem.q_init[0] - problem.q_goal[0]);
+	double heading = atan2(problem.q_goal[1] - problem.q_init[1], problem.q_goal[0] - problem.q_init[0]);
+    while (euclidian(q, problem.q_goal) > epsilon){
+        //ATTRACTIVE FORCE
+		Eigen::Vector2d att;
+		double euclid = euclidian(q, problem.q_goal);
+		if (euclid <= d_star){
+			att[0] =  zetta * (q[0] - problem.q_goal[0]);
+			att[1] =  zetta * (q[1] - problem.q_goal[1]);
+		}
+		else{
+			att[0] = d_star * zetta * (q[0] - problem.q_goal[0]) / euclid ;
+			att[1] = d_star * zetta * (q[1] - problem.q_goal[1]) / euclid ;
+		}
+		//REPULSIVE FORCE
+		
+		Eigen::Vector2d rep; rep << 0, 0;
+		for (mogul mog: slope.moguls){
+			//std::cout<<"checking obs" << "\n";
+			double di = slope.dist_to_mog(q, mog);
+			if (di <= Q_star){
+				//std::cout<<"adding to rep" << "\n";
+				// rep += 0.5 * eta * pow(((1 / di)-(1/Q_star)), 2);
+				
+				rep[0] -= .35*(q[0] - mog.getX())*sin(di*M_PI/mog.getWidth())/di;
+				rep[1] -= .35*(q[1] - mog.getY())*sin(di*M_PI/mog.getWidth())/di;
+				//mog.getHeight()*cos(di*M_PI/mog.getWidth());
+
+			}
+		}
+
+		//check if we are stuck in a local minimum
+		Eigen::Vector2d prev_q = q;
+		q = q - 0.1 * (att + rep);
+		if (euclidian(q, prev_q) < 0.03){
+			Eigen::Vector2d random_step;
+			random_step[0] = ((double)rand() / RAND_MAX - 0.5) * 0.1; // Small random step in x
+			random_step[1] = ((double)rand() / RAND_MAX - 0.5) * 0.1; // Small random step in y
+			q += random_step;
+		}
+
+		count++;
+		if (count == 10000
+		){
+			std::cout<<"too many iterations" << "\n";
+			break;
+		}
+			
+			double max_steering_change = .1; // Maximum change in steering angle in radians
+			Eigen::Vector2d gradient = -att-rep;
+			double gradient_heading = atan2(gradient[1], gradient[0]);
+			double heading_diff = heading - gradient_heading;
+			while (heading_diff > M_PI){
+				heading_diff -= 2 * M_PI;
+			}
+			while (heading_diff < -M_PI){
+				heading_diff += 2 * M_PI;
+			}
+
+			if (abs(heading_diff) > max_steering_change){
+				// Limit the change in steering angle to max_steering_change
+				// This is done to prevent the robot from making too sharp of turns
+				// We calculate the new heading by adding the maximum allowed steering change
+				// to the current heading, in the direction of the gradient
+				double steering_change = max_steering_change * (heading_diff / abs(heading_diff));
+				gradient_heading = heading - steering_change;
+				
+			}
+			
+
+			//for first order uni, controls are velocity and steering angle
+			// Eigen::Vector2d control; control << log(gradient.norm()+1)*13, gradient_heading;
+			Eigen::Vector2d control; control << gradient.norm()*13, gradient_heading;
+			double stepSize = .1;
+			Eigen::VectorXd state(3);
+			state << q[0], q[1], heading;
+			state = founi_propagate(state, control, stepSize);
+			q = state.head<2>();
+			heading = gradient_heading;
+			// heading = gradient_heading;
+			// Add the new position to the waypoints
+			path.waypoints.push_back(q);
+    }
+    
+	for (int i = 1; i < path.waypoints.size(); i++){
+		// path.waypoints[i] += Eigen::Vector2d(.1, .1);
+	}
+	
+    path.waypoints.push_back(problem.q_goal);
+    return path;
+}
+
+//**
+// * @brief STATE INTEGRATOR PLANNER
 amp::Path2D MySnowboard::plan(const amp::Problem2D& problem) {
 	//STATE INTEGRATOR PLANNER
     amp::Path2D path;
@@ -167,7 +413,7 @@ amp::Path2D MySnowboard::plan(const amp::Problem2D& problem) {
 		}
 
 		count++;
-		if (count == 100
+		if (count == 1000
 		){
 			std::cout<<"too many iterations" << "\n";
 			break;
@@ -190,7 +436,6 @@ amp::Path2D MySnowboard::plan(const amp::Problem2D& problem) {
 				// We calculate the new heading by adding the maximum allowed steering change
 				// to the current heading, in the direction of the gradient
 				double steering_change = max_steering_change * (heading_diff / abs(heading_diff));
-				std::cout << "steering_change: " << steering_change << "\n";
 				gradient_heading = heading - steering_change;
 				
 			}
@@ -200,17 +445,6 @@ amp::Path2D MySnowboard::plan(const amp::Problem2D& problem) {
 			double stepSize = 0.2;
 			q = q + stepSize * control;
 			heading = gradient_heading;
-			Eigen::Vector2d changePos; changePos << att[0] + rep[0], att[1] + rep[1];
-			// Normalize changePos to get the direction
-			Eigen::Vector2d direction = changePos.normalized();
-			
-			// Define a step size
-			
-
-			// Take a small step in the direction of changePos
-			// q -= stepSize * direction;
-
-
 			// Add the new position to the waypoints
 			path.waypoints.push_back(q);
     }
@@ -222,6 +456,7 @@ amp::Path2D MySnowboard::plan(const amp::Problem2D& problem) {
     path.waypoints.push_back(problem.q_goal);
     return path;
 }
+
 
 bool mogulCollision(mogul m, std::vector<mogul> moguls){
 	for (int i = 0; i < moguls.size(); i++){
